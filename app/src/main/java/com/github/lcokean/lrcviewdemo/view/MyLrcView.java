@@ -8,9 +8,6 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.LinearGradient;
 import android.graphics.Paint;
-import android.graphics.PorterDuff;
-import android.graphics.PorterDuffXfermode;
-import android.graphics.RectF;
 import android.graphics.Shader;
 import android.os.Build;
 import android.util.AttributeSet;
@@ -42,8 +39,9 @@ public class MyLrcView extends View {
 
     private int mWidth, mHeight;
 
-    private ArrayList<LrcRow> mLrcList; // 歌词
+    private ArrayList<LrcRow2> mLrcList; // 歌词
     private long mCurrTime; // 当前时间
+    private long mStopTime; // 暂停时间
     private int mCurrLrc; // 当前歌词
     private int mMaxDisplayLrc; // 最多显示歌词行数(上下各多少行，0仅显示当前歌词)
 
@@ -84,21 +82,29 @@ public class MyLrcView extends View {
         mMaxDisplayLrc = Integer.MAX_VALUE;
     }
 
-    public void setLrc(List<String> lrcs) {
+    public void setLrc(List<LrcRow2> lrcs) {
         mLrcList.clear();
-        long start = 0;
-        for (String lrc : lrcs) {
-            mLrcList.add(new LrcRow(lrc, start, start + 5000));
-            start += 5000;
-        }
+        mLrcList.addAll(lrcs);
     }
 
     /**
      * 开始
      */
     public void start() {
+        if (isPlaying) return;
         isPlaying = true;
-        invalidate();
+        if (mLrcList.get(mCurrLrc).timeStart > mCurrTime) {
+            removeCallbacks(null);
+            postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    mCurrTime = mLrcList.get(mCurrLrc).timeStart;
+                    invalidate();
+                }
+            }, mLrcList.get(mCurrLrc).timeStart - mCurrTime);
+        } else {
+            invalidate();
+        }
     }
 
     /**
@@ -107,17 +113,43 @@ public class MyLrcView extends View {
      * @param time
      */
     public void stop(long time) {
+        removeCallbacks(null);
+        if (mLrcAnimator != null && mLrcAnimator.isRunning()) {
+            mLrcAnimator.removeAllUpdateListeners();
+            mLrcAnimator.removeAllListeners();
+            mLrcAnimator.cancel();
+        }
         isPlaying = false;
         mCurrTime = time;
-        invalidate();
+        mStopTime = time;
+        if (time >= mLrcList.get(mCurrLrc).timeStart && time < mLrcList.get(mCurrLrc).timeEnd) {
+            return;
+        }
+        for (int i = 0; i < mLrcList.size(); i++) {
+            LrcRow2 row = mLrcList.get(i);
+            if (row.timeStart <= time && row.timeEnd > time) {
+                mCurrLrc = i;
+                return;
+            }
+        }
+    }
+
+    /**
+     * 跳转到
+     *
+     * @param time
+     */
+    public void seekTo(long time) {
+
     }
 
     /**
      * 重置
      */
     public void reset() {
-        isPlaying = false;
-        mCurrTime = 0;
+        stop(0);
+        mCurrLrc = 0;
+        mLrcPlayRate = 0;
         invalidate();
     }
 
@@ -189,7 +221,7 @@ public class MyLrcView extends View {
      * @param canvas
      * @param lrc    歌词内容
      */
-    private void onDrawCenterLrc(Canvas canvas, LrcRow lrc) {
+    private void onDrawCenterLrc(Canvas canvas, LrcRow2 lrc) {
         String text = lrc.content;
         int textWidth = (int) mTextPaint.measureText(text);
         int offset = 0;  // 文字偏移
@@ -202,10 +234,11 @@ public class MyLrcView extends View {
         int start = (int) (mWidth / 2.0f - textWidth / 2.0f + getPaddingLeft());
         start = Math.max(start, getPaddingLeft());
 
-        // 限定文字显示区域
-        RectF f = new RectF(getPaddingLeft(), getPaddingTop(), getPaddingLeft() + mWidth, getPaddingTop() + mHeight);
-        canvas.drawRect(f, mTextPaint);
-        mTextPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.SRC_IN));
+        /*
+        * 离屏缓存
+        * Layer层的宽和高要设定好，不然会出现有些部位不再层里面，你的操作是不对这些部位起作用的
+        */
+        int sc = canvas.saveLayer(getPaddingLeft(), getPaddingTop(), getPaddingLeft() + mWidth, getPaddingTop() + mHeight, mTextPaint, Canvas.ALL_SAVE_FLAG);
 
         mLrcGradient = new LinearGradient(start - offset, 0,
                 start - offset + textWidth, 0,
@@ -216,13 +249,15 @@ public class MyLrcView extends View {
         canvas.drawText(text, start - offset,
                 getPaddingTop() + mHeight / 2.0f + mTextHeight / 2.0f + mLineOffset, mTextPaint);
 
-        // 播放动画
-        if (isPlaying && mCurrTime == lrc.timeStart) {
-            mCurrTime++;
-            startLrcAnim(textWidth, lrc.timeEnd - lrc.timeStart);
-        }
         mTextPaint.setShader(null);
-        mTextPaint.setXfermode(null);
+        // 还原画布
+        canvas.restoreToCount(sc);
+
+        // 播放动画
+        if (isPlaying && (mCurrTime == lrc.timeStart || mCurrTime == mStopTime)) {
+            startLrcAnim(textWidth, lrc.timeEnd - (mCurrTime == mStopTime ? mCurrTime : lrc.timeStart));
+            mCurrTime++;
+        }
     }
 
     /**
@@ -232,7 +267,7 @@ public class MyLrcView extends View {
      * @param line   现对于中间行的行数（上方 < 0,下方 > 0）
      * @param lrc    歌词
      */
-    private void onDrawSideLrc(Canvas canvas, int line, LrcRow lrc) {
+    private void onDrawSideLrc(Canvas canvas, int line, LrcRow2 lrc) {
         mTextPaint.setColor(mUnPlayTextColor);
         String text = lrc.content;
         int textWidth = (int) mTextPaint.measureText(text);
@@ -248,6 +283,7 @@ public class MyLrcView extends View {
 
     @TargetApi(Build.VERSION_CODES.HONEYCOMB)
     private void startLrcAnim(final int width, final long duration) {
+        if (duration < 0) return;
         mLrcAnimator = ValueAnimator.ofInt(0, width);
         mLrcAnimator.setDuration(duration);
         mLrcAnimator.setInterpolator(new LinearInterpolator());
@@ -282,10 +318,12 @@ public class MyLrcView extends View {
 
             }
         });
+        final float rate = mLrcPlayRate;
         mLrcAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
             @Override
             public void onAnimationUpdate(ValueAnimator valueAnimator) {
-                mLrcPlayRate = (int) valueAnimator.getAnimatedValue() / (width * 1.0f);
+                float r = (int) valueAnimator.getAnimatedValue() / (width * 1.0f);
+                mLrcPlayRate = rate + (1.0f - rate) * r;
                 invalidate();
             }
         });
@@ -311,22 +349,6 @@ public class MyLrcView extends View {
             }
         });
         mLineAnimator.start();
-    }
-
-    /**
-     * 单句歌词
-     */
-    class LrcRow {
-        protected String content;
-        protected long timeStart;
-        protected long timeEnd;
-
-        public LrcRow(String text, long start, long end) {
-            this.content = text;
-            this.timeStart = start;
-            this.timeEnd = end;
-        }
-
     }
 
 }
