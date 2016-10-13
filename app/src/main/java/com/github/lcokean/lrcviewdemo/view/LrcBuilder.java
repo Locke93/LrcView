@@ -17,11 +17,11 @@ import java.util.List;
 /**
  * default lrc builder,convert raw lrc string to lrc rows
  */
-public class DefaultLrcBuilder2 {
+public class LrcBuilder {
 
-    static final String TAG = "DefaultLrcBuilder";
+    static final String TAG = "LrcBuilder";
 
-    public List<LrcRow2> getLrcRows(String rawLrc) {
+    public List<LrcRow> getLrcRows(String rawLrc) {
         Log.d(TAG, "getLrcRows by rawString");
         if (rawLrc == null || rawLrc.length() == 0) {
             Log.e(TAG, "getLrcRows rawLrc null or empty");
@@ -30,15 +30,15 @@ public class DefaultLrcBuilder2 {
         StringReader reader = new StringReader(rawLrc);
         BufferedReader br = new BufferedReader(reader);
         String line = null;
-        List<LrcRow2> rows = new ArrayList<>();
+        List<LrcRow> rows = new ArrayList<>();
         try {
             do {
                 line = br.readLine();
                 Log.d(TAG, "lrc raw line:" + line);
                 if (line != null && line.length() > 0) {
-                    List<LrcRow2> lrcRows = createRows(line);
+                    List<LrcRow> lrcRows = createRows(line);
                     if (lrcRows != null && lrcRows.size() > 0) {
-                        for (LrcRow2 row : lrcRows) {
+                        for (LrcRow row : lrcRows) {
                             rows.add(row);
                         }
                     }
@@ -73,7 +73,7 @@ public class DefaultLrcBuilder2 {
      * return false<br />
      * [00:00:20] balabalabalabala
      */
-    public List<LrcRow2> createRows(String standardLrcLine) {
+    public List<LrcRow> createRows(String standardLrcLine) {
         try {
             if (standardLrcLine.indexOf("[") != 0 || standardLrcLine.indexOf("]") != 9) {
                 return null;
@@ -84,12 +84,12 @@ public class DefaultLrcBuilder2 {
             // times [mm:ss.SS][mm:ss.SS] -> *mm:ss.SS**mm:ss.SS*
             String times = standardLrcLine.substring(0, lastIndexOfRightBracket + 1).replace("[", "-").replace("]", "-");
             String arrTimes[] = times.split("-");
-            List<LrcRow2> listTimes = new ArrayList<LrcRow2>();
+            List<LrcRow> listTimes = new ArrayList<LrcRow>();
             for (String temp : arrTimes) {
                 if (temp.trim().length() == 0) {
                     continue;
                 }
-                LrcRow2 lrcRow = new LrcRow2(content, timeConvert(temp), 0L);
+                LrcRow lrcRow = new LrcRow(content, timeConvert(temp), 0L);
                 listTimes.add(lrcRow);
             }
             return listTimes;
