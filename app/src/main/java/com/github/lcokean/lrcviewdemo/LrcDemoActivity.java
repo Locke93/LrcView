@@ -5,9 +5,9 @@ import android.media.MediaPlayer;
 import android.os.Bundle;
 import android.view.View;
 
-import com.github.lcokean.lrcviewdemo.view.LrcBuilder;
-import com.github.lcokean.lrcviewdemo.view.LrcRow;
-import com.github.lcokean.lrcviewdemo.view.LrcView;
+import com.github.lcokean.lrcview.library.LrcBuilder;
+import com.github.lcokean.lrcview.library.LrcRow;
+import com.github.lcokean.lrcview.library.LrcView;
 
 import java.io.BufferedReader;
 import java.io.IOException;
